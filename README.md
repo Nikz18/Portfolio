@@ -1,5 +1,5 @@
-# Portfolio
-## Data science and business analytics Portfolio
+# Data science and Business analytics Portfolio
+
 ### This portfolio showcases a collection of individual projects that demonstrate my skills in data analysis, machine learning, and data visualization. Key projects include:
 ### Diabetes Insurance Charge Prediction: A machine learning project analyzing key factors that influence insurance charges for diabetic patients, using predictive models to understand the correlation between health indicators and cost.
 
