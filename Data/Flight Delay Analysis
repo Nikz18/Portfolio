@@ -1,0 +1,407 @@
+# Prepare the environment for loading the files
+library(xml2)
+library(dplyr)
+library(reshape2)
+library(tidyverse)
+
+# Read and import files
+airports <- read.csv("airports.csv", header = TRUE)
+carriers <- read.csv("carriers.csv", header = TRUE)
+planes <- read.csv("plane-data.csv",stringsAsFactors = FALSE, header = TRUE)
+
+# Import flight data from 2004 to 2006
+df_2004 <- read.csv("2004.csv", header = TRUE)
+df_2005 <- read.csv("2005.csv", header = TRUE)
+df_2006 <- read.csv("2006.csv", header = TRUE)
+
+# Combine the flight data into one data frame
+df_all <- df_2004 %>% rbind(df_2005) %>% rbind(df_2006)
+df_all <- na.omit(df_all)
+
+Data Pre-processing
+# Limit the time to 0000 to 2400
+trim2 <- function(x,min_t, max_t){
+ within(df_all, {
+  ArrTime[ArrTime < min_t] <- NA
+  ArrTime[ArrTime > max_t] <- NA
+  DepTime[DepTime < min_t] <- NA
+  DepTime[DepTime > max_t] <- NA
+})
+}
+
+df<- trim2(df_all, min_t=0000, max_t=2400)
+
+# Create date column by pasting the Year, Month, Day
+df$Date <- paste(df$Year, df$Month, df$Day)
+
+# Change the format of Date to year-month-day dtetime format
+df$Date <- ymd(df$Date)
+
+# Change the format of departure time to hour:time
+df$DepTime <- sprintf("%04d", df$DepTime)
+df$DepTime <- format(strptime(df$DepTime, format="%H%M"),format = "%H:%M")
+
+# Change the format of arrival time to hour:time
+df$ArrTime <- sprintf("%04d", df$ArrTime)
+df$ArrTime<- format(strptime(df$ArrTime, format="%H%M"),format = "%H:%M")
+
+# Create time intervals by categorizing departure and arrival time
+
+categories <- c("Dawn", "Morning", "Afternoon", "Evening", "Night", "Midnight")
+df$dep_tf <- cut(as.numeric(substr(df$DepTime, 1, 2)),
+                 breaks = c(0, 5, 11, 17,19, 22, 24),
+                 labels = categories)
+
+df$arr_tf <- cut(as.numeric(substr(df$ArrTime, 1, 2)),
+                 breaks = c(0, 5, 11, 17,19, 22, 24),
+                 labels = categories)
+
+Data wrangling for Q1
+# Create subset from the original flight data frame
+sub_all <- df[,c(1:8,15:16,22,24,31)]
+
+# Rename the columns
+names(sub_all) <- c("Year","Month","Day","Week","DepTime","ExpDepTime","ArrTime","ExpArrTime","ArrDelay","DepDelay","Cancelled","Diverted","time_cat")
+
+# Remove the NA's
+sub_all <- na.omit(sub_all)
+The best time of the year to travel
+
+# Q1 for month
+q1_mth <- sub_all %>%
+filter(Cancelled == 0 & Diverted == 0 & DepDelay > 15) %>% group_by(Month) %>% summarize(avg_delay = mean(DepDelay, na.rm = TRUE)) %>% arrange(avg_delay)
+print(head(q1_mth))
+
+# Plot a bar chart showing the average delay by month
+ggplot(q1_mth, aes(x = Month, y = avg_delay)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  ggtitle("Average Departure Delay by Month") +
+  xlab("Month") +
+  ylab("Average Departure Delay (minutes)") +
+  geom_text(aes(label = round(avg_delay, 2)), vjust = -0.5, size = 3.5) + 
+  theme(plot.title = element_text(size = 20, face = "bold"))
+
+
+The best day of the week to travel
+# Q1 for week
+q1_week <- sub_all%>%
+filter(Cancelled == 0 & Diverted == 0 & DepDelay > 15) %>% group_by(Week) %>% summarize(avg_delay = mean(DepDelay, na.rm = TRUE)) %>% arrange(avg_delay)
+print(head(q1_week))
+
+# Plot a bar chart showing the average delay by week
+ggplot(q1_week, aes(x = Week, y = avg_delay)) +
+  geom_bar(stat = "identity", fill = "green") +
+  ggtitle("Average Departure Delay by Week") +
+  xlab("Days") +
+  ylab("Average Departure Delay (minutes)") +
+  geom_text(aes(label = round(avg_delay, 2)), vjust = -0.5, size = 3.5) + 
+  theme(plot.title = element_text(size = 20, face = "bold"))
+
+
+The best time of the day to travel
+# Q1 by time
+q1_time <- sub_all %>%
+filter(Cancelled == 0 & Diverted == 0 & DepDelay > 15) %>% group_by(time_cat)%>% summarize(num_delay = mean(DepDelay, na.rm = TRUE)) %>% arrange(num_delay)
+q1_ntime <- na.omit(q1_time)
+
+
+# Create a bar chart showing the average delay by time interval
+ggplot(q1_ntime, aes(x = time_cat, y = num_delay)) +
+  geom_bar(stat = "identity", fill = "pink")+
+  ggtitle("Average Departure Delay by Time Interval") +
+  xlab("Time Interval") +
+  ylab("Average Departure Delay (minutes)")+
+  geom_text(aes(label = round(num_delay, 2)), vjust = -0.5, size = 3.5) +   theme(plot.title = element_text(size = 20, face = "bold"))
+
+
+Data wrangling for Q2
+# Create subset from the original data
+pl_sub <- df[,c(11,15:16,22,24)]
+
+# Join the data with planes and filter out records without cancelled and diverted with departure delay more than 15 minutes
+df_pl <- pl_sub %>% 
+  rename_all(tolower) %>%
+  inner_join(planes, by = "tailnum", suffix = c(".pl_sub", ".planes")) %>% filter(cancelled == 0 & diverted == 0 & depdelay > 15) %>% group_by(model)
+
+# Dealing with dates
+# Replace the 'None' in issue_date to NA and convert it to datetime format
+df_pl$issue_date <- as.Date(ifelse(df_pl$issue_date == 'None', NA, df_pl$issue_date), format = '%m/%d/%Y')
+
+# Remove the NAs in the dataframe and create 'pl_age' column as the age of planes
+df_pl <- na.omit(df_pl)
+df_pl$pl_age <- year(Sys.Date()) - year(df_pl$issue_date)
+Does the plane age affect the average departure delays?
+# Q2
+q2<- df_pl %>% group_by(pl_age,model) %>%
+  summarize(average_delay = mean(depdelay, na.rm = TRUE))%>% arrange(pl_age)
+
+# Create a scatter plot to visualize the results
+ggplot(q2, aes(x = pl_age, y = average_delay, color = average_delay)) +
+  geom_point(size = 3, alpha = 0.6) +
+  scale_color_gradient(low = "yellow", high = "blue") +
+  ggtitle("Average Departure Delay vs. Plane Age") +
+  xlab("Plane Age (years)") +
+  ylab("Average Departure Delay (minutes)")+
+  theme(plot.title = element_text(size = 20, face = "bold"))
+
+
+Data wrangling for Q3
+# Create a subset from the original dataframe
+df_fl <- df[,c(1,9,17:18)]
+ap_q3 <- airports[,c(1:3)]
+
+#Join the data with airports file to get the cities and states according to the iata of airports
+q3 <- df_fl %>% 
+ inner_join(ap_q3, by = c("Dest" = "iata"), suffix = c(".df_fl", ".airports"))%>%
+ inner_join(ap_q3, by = c("Origin" = "iata"), suffix = c(".df_fl", ".airports"))
+ 
+# Rename the columns 
+names(q3) <- c("Years", "UniqueCarrier","Origin","Destination","dest_airport","dest_city","org_airport","org_city")
+The travel pattern over the years
+# Group by the data and create the Frequency column to show the number of flights at each city
+q3a <- q3 %>% group_by(org_city,dest_city,Years) %>% summarize(Frequency = n())%>% arrange(desc(Frequency))
+## `summarise()` has grouped output by 'org_city', 'dest_city'. You can override
+## using the `.groups` argument.
+# Sum up the frequency of flights in each city
+q3b <- q3a %>%
+  group_by(org_city, dest_city, Years) %>%
+  summarize(Frequency = sum(Frequency))
+## `summarise()` has grouped output by 'org_city', 'dest_city'. You can override
+## using the `.groups` argument.
+# Create a pivot table for the data
+q3_pivot <- q3b %>%
+  pivot_wider(names_from = Years, values_from = Frequency, values_fill = 0)
+
+# Arrange the data in descending and choose the top 30 records with the most frequent flights for each year
+q3_pivot <- q3_pivot %>% group_by(org_city,dest_city)%>% arrange(desc(`2004`)) %>% head(n=30)
+
+#Create a column to show the Origin-Destination city pair
+q3_pivot$city_pair <- paste(q3_pivot$org_city,"-",q3_pivot$dest_city)
+
+q3c <- q3_pivot %>% select(city_pair,`2004`,`2005`,`2006`)
+## Adding missing grouping variables: `org_city`, `dest_city`
+# Create a grouped bar chart to visualize the results
+q3_grouped <- q3c %>%
+  gather(year, frequency, `2004`:`2006`) %>%
+  ggplot(aes(x = city_pair, y = frequency, fill = year)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  xlab("Origin-Destination City Pairs") +
+  ylab("Frequency of Flights") +
+  ggtitle("Flight Pattern Change over Years") +
+  theme(legend.position = "top",axis.text.x = element_text(angle = 45, hjust = 1))+
+  theme(plot.title = element_text(size = 20, face = "bold"))
+
+print(q3_grouped)
+
+
+Data wrangling for Q4
+# Subset the data from the original data
+df_q4 <- df[,c(30,5,7,11,15:18,22,24,31)]
+ap_q4 <- airports[,c(1:3)]
+
+# Join the data with airports file to get the cities and states according to the iata of airports
+df_q4 <- df_q4 %>% inner_join(ap_q4, by = c("Dest" = "iata"), suffix = c(".df_q4", ".airports"))%>%
+ inner_join(ap_q4, by = c("Origin" = "iata"), suffix = c(".df_q4", ".airports"))
+ 
+# Rename the columns
+names(df_q4) <- c("Date","DepTime","ArrTime","TailNum","ArrDelay","DepDelay","Origin","Destination","Cancelled","Diverted","time_cat","Dest_airport","Dest_city","Org_airport","Org_city")
+
+
+# Filter the data with zero cancelled and diverted flights
+fil_q4a <- df_q4%>% 
+ filter(Cancelled == 0 & Diverted == 0)
+
+# Create a column to show that whether the flight is delayed
+q4a <- fil_q4a %>%
+ mutate(fil_q4a,count_depdelay = ifelse(DepDelay > 15,1,0)) %>% 
+ mutate(fil_q4a,count_arrdelay = ifelse(ArrDelay > 15,1,0)) %>%
+ summarize(Date = Date, DepTime =DepTime, ArrTime = ArrTime, TailNum=TailNum,Org_airport = Org_airport, Dest_airport = Dest_airport, count_depdelay = count_depdelay, count_arrdelay = count_arrdelay)
+
+Cascading delays detection
+# Filter those flights with delays and sum up the counts for departure delays at the origin airports and the counts for arrival delays at the destination airports at the specific Date accroding to the TailNum 
+q4b <- q4a %>% filter((count_depdelay ==1)&(count_arrdelay==1))%>% group_by(Org_airport, Dest_airport,TailNum, Date)%>% summarize(count_depdelay = sum(count_depdelay), count_arrdelay = sum(count_arrdelay))
+## `summarise()` has grouped output by 'Org_airport', 'Dest_airport', 'TailNum'.
+## You can override using the `.groups` argument.
+# Arrange the count_depdelay in descending order and select the top 500 records
+q4c <- q4b %>% arrange(desc(count_depdelay)) %>% head(n=500)
+
+# Create joy-plot to compare the distribution of the result
+q4d <- rbind(
+  data.frame(count = q4c$count_depdelay, type = "Departure Delay"),
+  data.frame(count = q4c$count_arrdelay, type = "Arrival Delay")
+)
+
+
+# Create the side-by-side joy plot
+library(ggjoy)
+ggplot(q4d, aes(x = count, y = type, fill = type)) +
+  geom_joy(scale = 1.5, alpha = 0.8, height = 0.1) +
+  scale_fill_manual(values = c("pink", "orange")) +
+  labs(x = "Delay Count", y = "Frequency") +
+  ggtitle("Joy Plot of Departure and Arrival Delays Frequency")+
+  theme(plot.title = element_text(size = 20, face = "bold"))
+
+Environment setting for Q5
+#Q5
+library(mlr3)
+library(mlr3learners)
+library(mlr3pipelines)
+library(mlr3tuning)
+
+# Create time frame categories for scheduled arrival and departure time
+df$crsarr_tf <- cut(as.numeric(substr(df$CRSArrTime, 1, 2)),
+                 breaks = c(0, 5, 11, 17,19, 22, 24),
+                 labels = categories)
+
+df$crsdep_tf <- cut(as.numeric(substr(df$CRSDepTime, 1, 2)),
+                 breaks = c(0, 5, 11, 17,19, 22, 24),
+                 labels = categories)
+
+# Create dummy variable for arrival delay
+q5<- df %>% mutate(df,delayed = ifelse(ArrDelay > 15,1,0))
+
+# Subset the dataframe to extract variables for data training and testing
+q5a <- q5[,c(9,11,13,19,31:35)]
+q5a <- na.omit(q5a)
+
+# Convert categorical variables to factor 
+q5a$delayed <- factor(q5a$delayed)
+q5a$arr_tf <- factor(q5a$arr_tf)
+q5a$dep_tf <- factor(q5a$dep_tf)
+q5a$UniqueCarrier <- factor(q5a$UniqueCarrier)
+q5a$crsarr_tf <- factor(q5a$crsarr_tf)
+q5a$crsdep_tf <- factor(q5a$crsdep_tf)
+
+# Select a sample size of 150000 for model building
+Delayed <- sample_n(q5a, 150000)
+
+# Split up the train set and test set of the data
+n <- nrow(Delayed)
+train_set <- sample(n, round(0.4*n))
+test_set <- setdiff(1:n, train_set)
+
+# Set up the task
+task <- TaskClassif$new('Delayed', backend=Delayed, target = 'delayed')
+task$select(c('arr_tf','dep_tf','CRSElapsedTime','Distance','UniqueCarrier','crsarr_tf','crsdep_tf'))
+
+# Set up the measurement
+measure <- msr('classif.ce')
+
+# Prepare pipelines
+fencoder  <- po("encode", method = "treatment",
+  affect_columns = selector_type("factor"))
+ord_to_int <- po("colapply", applicator = as.integer,
+  affect_columns = selector_type("ordered"))
+
+# Prepare tuner
+tuner <- tnr('grid_search')
+terminator <- trm('evals', n_evals = 20)
+Logistic Regression
+learner_lr <- lrn("classif.log_reg")
+gc_lr <- po('imputemean') %>>% po(learner_lr)
+glrn_lr <- GraphLearner$new(gc_lr)
+glrn_lr$train(task, row_ids = train_set)
+glrn_lr$predict(task, row_ids = test_set)$score()
+
+Gradient Boosting
+# Need to install.packages("xgboost")
+learner_gb <- lrn("classif.xgboost")
+gc_gb <- po('imputemean') %>>%
+  fencoder %>>% ord_to_int %>>%
+  po(learner_gb)
+glrn_gb <- GraphLearner$new(gc_gb)
+glrn_gb$train(task, row_ids = train_set)
+glrn_gb$predict(task, row_ids = test_set)$score()
+
+Penalized Logistic Regression
+learner_plr <- lrn('classif.glmnet')
+gc_plr <- po('scale') %>>% 
+  fencoder %>>% ord_to_int %>>%
+  po('imputemean') %>>%
+  po(learner_plr)
+glrn_plr <- GraphLearner$new(gc_plr)
+tune_lambda <- ParamSet$new (list(
+  ParamDbl$new('classif.glmnet.lambda', lower = 0.001, upper = 2)
+))
+
+at_plr <- AutoTuner$new(
+  learner = glrn_plr,
+  resampling = rsmp('cv', folds = 3),
+  measure = measure,
+  search_space = tune_lambda,
+  terminator = terminator,
+  tuner = tuner
+)
+
+at_plr$train(task, row_ids = train_set)
+
+Classification Tree
+learner_tree <- lrn("classif.rpart")
+
+gc_tree <- po('imputemean') %>>%
+  po(learner_tree)
+glrn_tree <- GraphLearner$new(gc_tree)
+glrn_tree$train(task, row_ids = train_set)
+glrn_tree$predict(task, row_ids = test_set)$score()
+
+Random Forests
+learner_rf <- lrn('classif.ranger')
+learner_rf$param_set$values <- list(min.node.size = 4)
+gc_rf <- po('scale') %>>% 
+  po('imputemean') %>>%
+  po(learner_rf)
+glrn_rf <- GraphLearner$new(gc_rf)
+tune_ntrees <- ParamSet$new(list(
+  ParamInt$new('classif.ranger.num.trees', lower = 50, upper = 600)
+))
+
+at_rf <- AutoTuner$new(
+  learner = glrn_rf,
+  resampling = rsmp('cv', folds = 3),
+  measure = measure,
+  search_space = tune_ntrees,
+  terminator = terminator,
+  tuner = tuner
+)
+
+at_rf$train(task, row_ids = train_set)
+
+at_rf$predict(task, row_ids = test_set)$score()
+
+Support Vector Machine
+# Need to install.packages("e1071")
+learner_svm <- lrn("classif.svm")
+
+gc_svm <- po('imputemean') %>>%
+  fencoder %>>% ord_to_int %>>%
+  po(learner_svm)
+glrn_svm <- GraphLearner$new(gc_svm)
+
+glrn_svm$train(task, row_ids = train_set)
+glrn_svm$predict(task, row_ids = test_set)$score()
+
+Benchmarking
+set.seed(1) #for reproducible results
+
+#list of learners
+lrn_list <- list(
+  glrn_lr,
+  glrn_gb,
+  at_plr,
+  glrn_tree,
+  at_rf,
+  glrn_svm
+)
+#set the benchmark design and run the comparisons
+bm_design <- benchmark_grid(task = task, resamplings = rsmp('cv', folds = 3),
+learners = lrn_list)
+
+bmr <- benchmark(bm_design,store_models = TRUE)
+
+Box plot to visualize the results for comparisons
+#plot box plots to visualise and compare the accuracy of models
+library(mlr3viz)
+autoplot(bmr)+theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+bmr$aggregate(measure)
+
