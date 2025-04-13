@@ -1,8 +1,11 @@
-Portfolio Introduction
+📊 Portfolio Overview
+Welcome to my data science portfolio — a curated collection of projects that highlight my expertise in data analysis, machine learning, and data visualization.
 
-This portfolio showcases a collection of individual projects that demonstrate my skills in data analysis, machine learning, and data visualization. Key projects include:
-Diabetes Insurance Charge Prediction: A machine learning project analyzing key factors that influence insurance charges for diabetic patients, using predictive models to understand the correlation between health indicators and cost.
+Featured Projects:
+🩺 Diabetes Insurance Charge Prediction
+Leveraged predictive modeling to explore how various health indicators impact insurance charges for diabetic patients. This project demonstrates the application of regression techniques to uncover key cost-driving factors.
 
-Flight Delay Analysis: A comprehensive analysis of flight delays, featuring delay prediction models and cascading delay detection to identify patterns across airports and airlines.
+✈️ Flight Delay Analysis
+A deep dive into flight delay data, including the development of machine learning models to predict delays and detect cascading delay patterns across different airports and airlines.
 
-Each project reflects my ability to apply analytical techniques and communicate insights effectively through data storytelling. 
+Each project showcases my ability to extract meaningful insights, apply statistical and machine learning techniques, and communicate results through clear and impactful data storytelling.
