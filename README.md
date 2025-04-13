@@ -3,6 +3,7 @@
 Welcome to my data science portfolio — a curated collection of projects that highlight my expertise in data analysis, machine learning, and data visualization.
 
 Featured Projects:
+
 🩺 Diabetes Insurance Charge Prediction
 Leveraged predictive modeling to explore how various health indicators impact insurance charges for diabetic patients. This project demonstrates the application of regression techniques to uncover key cost-driving factors.
 
